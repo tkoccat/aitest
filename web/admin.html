@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yönetim Paneli</title>
+<style>
+  :root { --bg:#f4f5f8; --card:#fff; --text:#1d2230; --muted:#667085; --line:#e4e7ee; --accent:#b57a2c; --ok:#1f9d6b; --warn:#c98a10; --bad:#d64545; --blue:#3a6fd8; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1420; --card:#171e2e; --text:#eef1f7; --muted:#9aa4b8; --line:#273049; --accent:#e9b872; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+  header h1 { font-size:17px; margin:0; }
+  nav { display:flex; gap:6px; }
+  nav button, .btn { border:1px solid var(--line); background:var(--card); color:var(--text); padding:8px 14px; border-radius:10px; cursor:pointer; font-size:14px; }
+  nav button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.sm { padding:4px 10px; font-size:13px; }
+  main { max-width:1100px; margin:0 auto; padding:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:16px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  tr.click { cursor:pointer; } tr.click:hover { background:rgba(127,127,127,.07); }
+  .badge { display:inline-block; padding:2px 9px; border-radius:99px; font-size:12px; font-weight:600; color:#fff; }
+  .b-reserved_hold,.b-confirmed { background:var(--ok); } .b-positive { background:var(--blue); } .b-callback { background:var(--warn); }
+  .b-thinking { background:#7a6ad8; } .b-declined,.b-released,.b-expired { background:var(--bad); } .b-info_only,.b-held { background:#8a93a6; }
+  .muted { color:var(--muted); } .small { font-size:13px; }
+  pre { white-space:pre-wrap; background:rgba(127,127,127,.08); padding:12px; border-radius:10px; font-size:13px; max-height:320px; overflow:auto; margin:8px 0 0; }
+  form.row { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; }
+  label { display:flex; flex-direction:column; font-size:12px; color:var(--muted); gap:3px; }
+  input, textarea, select { padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); font:inherit; font-size:14px; }
+  #login { max-width:340px; margin:18vh auto; }
+  .err { color:var(--bad); font-size:13px; min-height:18px; }
+  .hidden { display:none; }
+  .pkg { display:grid; grid-template-columns: 1.4fr .7fr .9fr auto; gap:8px; align-items:center; padding:8px 0; border-top:1px solid var(--line); font-size:14px; }
+  @media (max-width:700px) { .pkg { grid-template-columns:1fr 1fr; } table { font-size:13px; } }
+</style>
+</head>
+<body>
+<div id="login" class="card">
+  <h1 style="font-size:18px;margin-top:0">Yönetim Paneli</h1>
+  <label>Yönetici anahtarı <input id="key" type="password" autocomplete="current-password"></label>
+  <p class="err" id="login-err"></p>
+  <button class="btn primary" id="login-btn" style="width:100%">Giriş</button>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>Zeynep · Yönetim</h1>
+    <nav>
+      <button data-tab="calls" class="on">Görüşmeler</button>
+      <button data-tab="events">Etkinlikler</button>
+      <button data-tab="holds">Tutulan odalar</button>
+    </nav>
+    <button class="btn sm" id="logout">Çıkış</button>
+  </header>
+  <main>
+    <section id="tab-calls">
+      <div class="card"><table><thead><tr><th>Zaman</th><th>Misafir</th><th>Telefon</th><th>Sonuç</th><th>Özet</th><th>Geri arama</th></tr></thead><tbody id="calls-body"></tbody></table>
+      <p class="muted small" id="calls-empty"></p></div>
+      <div class="card hidden" id="call-detail"></div>
+    </section>
+
+    <section id="tab-events" class="hidden">
+      <div class="card">
+        <strong>Yeni etkinlik</strong>
+        <form class="row" id="ev-form" style="margin-top:10px">
+          <label>Ad <input name="name" required></label>
+          <label>Giriş <input name="check_in" type="date" required></label>
+          <label>Çıkış <input name="check_out" type="date" required></label>
+          <label>Mekan <input name="venue"></label>
+          <label style="flex:1;min-width:200px">Açıklama <input name="description"></label>
+          <button class="btn primary">Ekle</button>
+        </form>
+      </div>
+      <div id="events-list"></div>
+    </section>
+
+    <section id="tab-holds" class="hidden">
+      <div class="card"><table><thead><tr><th>#</th><th>Etkinlik / paket</th><th>Misafir</th><th>Telefon</th><th>Oda</th><th>Durum</th><th>Bitiş</th><th></th></tr></thead><tbody id="holds-body"></tbody></table>
+      <p class="muted small" id="holds-empty"></p></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const OUTCOME = { reserved_hold:"Oda tutuldu", positive:"Olumlu", callback:"Aranmak istiyor", thinking:"Düşünüyor", declined:"İstemedi", info_only:"Bilgi aldı" };
+const HOLD = { held:"Tutuluyor", confirmed:"Onaylandı", released:"Bırakıldı", expired:"Süresi doldu" };
+let KEY = sessionStorage.getItem("admin_key") || "";
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { "Content-Type":"application/json", "X-Admin-Key": KEY, ...(opts.headers || {}) } });
+  if (res.status === 401) { logout(); throw new Error("Yetkisiz"); }
+  if (!res.ok) { let d = ""; try { d = (await res.json()).detail; } catch {} throw new Error(d || res.statusText); }
+  return res.json();
+}
+function fmt(ts) { if (!ts) return ""; const d = new Date(ts); return isNaN(d) ? ts : d.toLocaleString("tr-TR", { dateStyle:"short", timeStyle:"short" }); }
+function badge(kind, labels) { return `<span class="badge b-${esc(kind)}">${esc(labels[kind] || kind)}</span>`; }
+
+async function login() {
+  KEY = $("#key").value || KEY;
+  try { await api("/api/admin/calls"); sessionStorage.setItem("admin_key", KEY); show(); }
+  catch (e) { $("#login-err").textContent = "Anahtar hatalı."; }
+}
+function logout() { sessionStorage.removeItem("admin_key"); KEY = ""; $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); }
+function show() { $("#login").classList.add("hidden"); $("#app").classList.remove("hidden"); loadCalls(); }
+
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+  ["calls","events","holds"].forEach(t => $("#tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));
+  ({ calls: loadCalls, events: loadEvents, holds: loadHolds })[b.dataset.tab]();
+});
+$("#login-btn").onclick = login;
+$("#key").addEventListener("keydown", e => e.key === "Enter" && login());
+$("#logout").onclick = logout;
+
+async function loadCalls() {
+  const calls = await api("/api/admin/calls");
+  $("#calls-empty").textContent = calls.length ? "" : "Henüz görüşme yok.";
+  $("#calls-body").innerHTML = calls.map(c => `
+    <tr class="click" data-id="${esc(c.call_id)}">
+      <td>${esc(fmt(c.started_at))}</td><td>${esc(c.guest_name) || '<span class="muted">—</span>'}</td><td>${esc(c.phone)}</td>
+      <td>${badge(c.outcome, OUTCOME)}</td><td>${esc(c.summary)}</td><td>${esc(c.callback_time)}</td></tr>`).join("");
+  document.querySelectorAll("#calls-body tr").forEach(tr => tr.onclick = () => openCall(tr.dataset.id));
+}
+async function openCall(id) {
+  const c = await api("/api/admin/calls/" + encodeURIComponent(id));
+  const box = $("#call-detail");
+  box.classList.remove("hidden");
+  box.innerHTML = `<strong>${esc(c.guest_name) || "İsimsiz misafir"}</strong> ${badge(c.outcome, OUTCOME)}
+    <p class="small muted">${esc(fmt(c.started_at))} · ${esc(c.phone)} · dil: ${esc(c.language) || "?"}</p>
+    <p>${esc(c.summary)}</p>${c.callback_time ? `<p><b>Geri arama:</b> ${esc(c.callback_time)}</p>` : ""}
+    ${c.notes ? `<p><b>Notlar:</b> ${esc(c.notes)}</p>` : ""}
+    <details><summary>Transkript</summary><pre>${esc(c.transcript) || "Kayıt yok."}</pre></details>`;
+  box.scrollIntoView({ behavior:"smooth" });
+}
+
+async function loadEvents() {
+  const events = await api("/api/admin/events");
+  $("#events-list").innerHTML = events.map(e => `
+    <div class="card">
+      <strong>${esc(e.name)}</strong> ${e.active ? "" : '<span class="badge b-released">pasif</span>'}
+      <div class="small muted">${esc(e.check_in)} → ${esc(e.check_out)} · ${esc(e.venue)}</div>
+      <div class="small">${esc(e.description)}</div>
+      ${e.packages.map(p => `
+        <div class="pkg" data-pid="${p.package_id}">
+          <div><b>${esc(p.name)}</b><div class="small muted">${p.inclusions.map(esc).join(" · ")}</div></div>
+          <div>${p.price_usd.toLocaleString("tr-TR")} $</div>
+          <div>${p.available_rooms} / ${p.total_rooms} oda boş</div>
+          <div><button class="btn sm" data-act="rooms">Oda sayısı</button> <button class="btn sm" data-act="price">Fiyat</button>
+               <button class="btn sm" data-act="toggle">${p.active ? "Kapat" : "Aç"}</button></div>
+        </div>`).join("")}
+      <form class="row pkg-form" data-eid="${e.event_id}" style="margin-top:12px">
+        <label>Paket adı <input name="name" required></label>
+        <label>Fiyat ($) <input name="price_usd" type="number" min="1" step="1" required style="width:100px"></label>
+        <label>Oda <input name="total_rooms" type="number" min="0" required style="width:80px"></label>
+        <label>Maks. indirim % <input name="max_discount_pct" type="number" min="0" max="100" value="0" style="width:90px"></label>
+        <label style="flex:1;min-width:220px">İçerik (satır satır) <input name="inclusions" placeholder="Her şey dahil; Konser girişi; Transfer"></label>
+        <button class="btn primary">Paket ekle</button>
+      </form>
+    </div>`).join("") || '<p class="muted">Etkinlik yok.</p>';
+
+  document.querySelectorAll(".pkg-form").forEach(f => f.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const d = Object.fromEntries(new FormData(f));
+    try {
+      await api("/api/admin/packages", { method:"POST", body: JSON.stringify({
+        event_id: +f.dataset.eid, name: d.name, price_usd: +d.price_usd, total_rooms: +d.total_rooms,
+        max_discount_pct: +d.max_discount_pct, inclusions: d.inclusions.split(";").map(s => s.trim()).filter(Boolean).join("\n") }) });
+      loadEvents();
+    } catch (e) { alert(e.message); }
+  });
+  document.querySelectorAll(".pkg [data-act]").forEach(b => b.onclick = async () => {
+    const pid = b.closest(".pkg").dataset.pid, act = b.dataset.act;
+    let body;
+    if (act === "rooms") { const v = prompt("Toplam oda sayısı:"); if (v === null) return; body = { total_rooms: +v }; }
+    if (act === "price") { const v = prompt("Yeni fiyat ($):"); if (v === null) return; body = { price_usd: +v }; }
+    if (act === "toggle") { body = { active: b.textContent.trim() === "Aç" }; }
+    try { await api("/api/admin/packages/" + pid, { method:"PATCH", body: JSON.stringify(body) }); loadEvents(); }
+    catch (e) { alert(e.message); }
+  });
+}
+$("#ev-form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  try { await api("/api/admin/events", { method:"POST", body: JSON.stringify(Object.fromEntries(new FormData(ev.target))) }); ev.target.reset(); loadEvents(); }
+  catch (e) { alert(e.message); }
+};
+
+async function loadHolds() {
+  const holds = await api("/api/admin/holds");
+  $("#holds-empty").textContent = holds.length ? "" : "Tutulan oda yok.";
+  $("#holds-body").innerHTML = holds.map(h => `
+    <tr><td>${h.id}</td><td>${esc(h.event_name)}<div class="small muted">${esc(h.package_name)} · ${h.price_usd.toLocaleString("tr-TR")} $</div></td>
+      <td>${esc(h.guest_name)}</td><td>${esc(h.phone)}</td><td>${h.rooms}</td><td>${badge(h.status, HOLD)}</td><td>${esc(fmt(h.expires_at))}</td>
+      <td>${h.status === "held" ? `<button class="btn sm" data-h="${h.id}" data-a="confirm">Ödeme alındı</button> <button class="btn sm" data-h="${h.id}" data-a="release">Bırak</button>` : ""}</td></tr>`).join("");
+  document.querySelectorAll("#holds-body [data-h]").forEach(b => b.onclick = async () => {
+    try { await api(`/api/admin/holds/${b.dataset.h}/${b.dataset.a}`, { method:"POST" }); loadHolds(); } catch (e) { alert(e.message); }
+  });
+}
+
+if (KEY) api("/api/admin/calls").then(show).catch(() => {});
+</script>
+</body>
+</html>

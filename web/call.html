@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zeynep ile görüş</title>
+<style>
+  :root { --bg:#0f1420; --card:#171e2e; --text:#eef1f7; --muted:#9aa4b8; --accent:#e9b872; --ok:#5fd0a0; --bad:#ef6b6b; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f3f1ec; --card:#fff; --text:#1d2230; --muted:#667085; --accent:#b57a2c; } }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--text);
+         font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; padding:16px; }
+  .card { width:100%; max-width:420px; background:var(--card); border-radius:24px; padding:32px 24px; text-align:center;
+          box-shadow:0 20px 60px rgba(0,0,0,.25); }
+  .avatar { width:112px; height:112px; border-radius:50%; margin:0 auto 18px; display:grid; place-items:center;
+            font-size:44px; font-weight:600; color:#1d2230; background:linear-gradient(135deg,#f3d29c,var(--accent));
+            transition:box-shadow .2s; }
+  .avatar.speaking { box-shadow:0 0 0 8px rgba(233,184,114,.25), 0 0 0 18px rgba(233,184,114,.12); }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .role { color:var(--muted); font-size:14px; margin-bottom:20px; }
+  .status { min-height:22px; font-size:14px; color:var(--muted); margin-bottom:18px; }
+  button { width:100%; border:0; border-radius:14px; padding:16px; font-size:16px; font-weight:600; cursor:pointer; }
+  #start { background:var(--accent); color:#1d2230; }
+  #end { background:var(--bad); color:#fff; display:none; }
+  button:disabled { opacity:.6; cursor:default; }
+  .note { margin-top:18px; font-size:12px; color:var(--muted); line-height:1.5; }
+  .err { color:var(--bad); }
+  .lang { position:fixed; top:12px; right:12px; font-size:13px; }
+  .lang button { width:auto; padding:6px 10px; border-radius:8px; background:transparent; color:var(--muted); font-weight:500; }
+  .lang button.on { color:var(--text); background:var(--card); }
+</style>
+</head>
+<body>
+<div class="lang"><button id="l-tr" class="on">TR</button><button id="l-en">EN</button></div>
+<main class="card">
+  <div class="avatar" id="avatar">Z</div>
+  <h1>Zeynep</h1>
+  <div class="role" id="role"></div>
+  <div class="status" id="status"></div>
+  <button id="start"></button>
+  <button id="end"></button>
+  <p class="note" id="note"></p>
+</main>
+<audio id="remote-audio" autoplay></audio>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
+<script>
+const T = {
+  tr: { role:"{agency} dijital asistanı", start:"Aramayı başlat", end:"Görüşmeyi bitir", connecting:"Bağlanıyor…",
+        live:"Görüşme sürüyor. Konuşabilirsiniz.", ended:"Görüşme sona erdi.", mic:"Mikrofon izni gerekli.",
+        note:"Bu görüşme yapay zekâ destekli bir dijital asistanla yapılır. Konuşmanız hizmet kalitesi için kaydedilir.",
+        key:"Geçersiz veya eksik bağlantı anahtarı.", rate:"Şu an çok fazla görüşme var, biraz sonra tekrar deneyin.",
+        secure:"Mikrofon için sayfanın HTTPS üzerinden açılması gerekir.", fail:"Bağlanılamadı. Lütfen tekrar deneyin." },
+  en: { role:"{agency} digital assistant", start:"Start call", end:"End call", connecting:"Connecting…",
+        live:"Call in progress. You can speak now.", ended:"Call ended.", mic:"Microphone permission is required.",
+        note:"This call is handled by an AI-powered digital assistant. Your conversation is recorded to improve service.",
+        key:"Invalid or missing link key.", rate:"Too many calls right now, please try again shortly.",
+        secure:"The page must be opened over HTTPS to use the microphone.", fail:"Could not connect. Please try again." },
+};
+let lang = (navigator.language || "tr").startsWith("tr") ? "tr" : "en";
+let agency = "Demo Turizm", room = null;
+const $ = (id) => document.getElementById(id);
+const key = new URLSearchParams(location.search).get("key") || "";
+
+function render() {
+  $("role").textContent = T[lang].role.replace("{agency}", agency);
+  $("start").textContent = T[lang].start;
+  $("end").textContent = T[lang].end;
+  $("note").textContent = T[lang].note;
+  $("l-tr").classList.toggle("on", lang === "tr");
+  $("l-en").classList.toggle("on", lang === "en");
+  document.documentElement.lang = lang;
+}
+function setStatus(msg, isErr) { $("status").textContent = msg; $("status").className = "status" + (isErr ? " err" : ""); }
+$("l-tr").onclick = () => { lang = "tr"; render(); };
+$("l-en").onclick = () => { lang = "en"; render(); };
+
+fetch("/api/call/config").then(r => r.json()).then(c => { agency = c.agency_name; render(); }).catch(render);
+render();
+
+async function startCall() {
+  if (!window.isSecureContext) { setStatus(T[lang].secure, true); return; }
+  $("start").disabled = true;
+  setStatus(T[lang].connecting);
+  try {
+    const res = await fetch("/api/call/token", { method:"POST", headers:{ "Content-Type":"application/json" },
+                                                 body: JSON.stringify({ key }) });
+    if (res.status === 401) throw new Error("key");
+    if (res.status === 429) throw new Error("rate");
+    if (!res.ok) throw new Error("fail");
+    const { url, token } = await res.json();
+
+    room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === "audio") { track.attach($("remote-audio")); }
+    });
+    room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      $("avatar").classList.toggle("speaking", speakers.some(s => !s.isLocal));
+    });
+    room.on(LivekitClient.RoomEvent.Disconnected, finish);
+    await room.connect(url, token);
+    try { await room.localParticipant.setMicrophoneEnabled(true); }
+    catch (e) { setStatus(T[lang].mic, true); await room.disconnect(); return; }
+    await room.startAudio();
+    $("start").style.display = "none";
+    $("end").style.display = "block";
+    setStatus(T[lang].live);
+  } catch (e) {
+    const m = e.message === "key" ? T[lang].key : e.message === "rate" ? T[lang].rate : T[lang].fail;
+    setStatus(m, true);
+    $("start").disabled = false;
+  }
+}
+function finish() {
+  $("avatar").classList.remove("speaking");
+  $("end").style.display = "none";
+  $("start").style.display = "block";
+  $("start").disabled = false;
+  setStatus(T[lang].ended);
+  room = null;
+}
+$("start").onclick = startCall;
+$("end").onclick = () => room && room.disconnect();
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+# Dokploy'da "Compose" türünde uygulama olarak kullanılır.
+# Alan adı/HTTPS: Dokploy > Domains bölümünde "api" servisi ve 8000 portu seçilir.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      ADMIN_KEY: ${ADMIN_KEY}
+      INTERNAL_KEY: ${INTERNAL_KEY}
+      CALL_PAGE_KEY: ${CALL_PAGE_KEY:-}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      AGENCY_NAME: ${AGENCY_NAME:-Demo Turizm}
+      MAX_CALL_MINUTES: ${MAX_CALL_MINUTES:-8}
+      MAX_CALLS_PER_HOUR: ${MAX_CALLS_PER_HOUR:-30}
+      SEED_DEMO: ${SEED_DEMO:-1}
+    volumes:
+      - zeynep-data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      BACKEND_URL: http://api:8000
+      INTERNAL_KEY: ${INTERNAL_KEY}
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ELEVEN_API_KEY: ${ELEVEN_API_KEY}
+      ELEVEN_VOICE_ID: ${ELEVEN_VOICE_ID:-}
+      ELEVEN_MODEL: ${ELEVEN_MODEL:-eleven_flash_v2_5}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1}
+      SUMMARY_MODEL: ${SUMMARY_MODEL:-gpt-4.1-mini}
+      AGENCY_NAME: ${AGENCY_NAME:-Demo Turizm}
+      MAX_CALL_MINUTES: ${MAX_CALL_MINUTES:-8}
+      AMBIENT_VOLUME: ${AMBIENT_VOLUME:-0.35}
+
+volumes:
+  zeynep-data:
