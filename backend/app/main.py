@@ -26,6 +26,8 @@ async def lifespan(_: FastAPI):
     db.init_db(conn)
     if os.environ.get("SEED_DEMO", "1") != "0":
         logic.seed_demo(conn)
+    if os.environ.get("SEED_CASINO", "1") != "0":
+        logic.seed_casino(conn)
     conn.close()
     yield
 
@@ -92,11 +94,15 @@ class TokenReq(BaseModel):
     key: str = ""
 
 
+def agency_name(conn) -> str:
+    return logic.get_settings(conn)["agency_name"] or os.environ.get("AGENCY_NAME", "Demo Turizm")
+
+
 @app.get("/api/call/config")
-def call_config():
+def call_config(conn=Depends(get_conn)):
     return {
         "needs_key": bool(os.environ.get("CALL_PAGE_KEY", "")),
-        "agency_name": os.environ.get("AGENCY_NAME", "Demo Turizm"),
+        "agency_name": agency_name(conn),
         "max_minutes": int(os.environ.get("MAX_CALL_MINUTES", "8")),
     }
 
@@ -155,6 +161,13 @@ class CallSaveReq(BaseModel):
     hold_id: int | None = None
     transcript: str | None = Field(None, max_length=100_000)
     ended_at: str | None = None
+
+
+@app.get("/internal/settings", dependencies=[Depends(internal_auth)])
+def internal_settings(conn=Depends(get_conn)):
+    out = logic.get_settings(conn)
+    out["agency_name"] = agency_name(conn)
+    return out
 
 
 @app.get("/internal/events", dependencies=[Depends(internal_auth)])
@@ -242,6 +255,38 @@ def admin_create_package(req: PackageReq, conn=Depends(get_conn)):
 def admin_patch_package(package_id: int, req: PackagePatch, conn=Depends(get_conn)):
     logic.update_package(conn, package_id, **req.model_dump(exclude_none=True))
     return {"ok": True}
+
+
+class EventPatch(BaseModel):
+    active: bool
+
+
+@app.patch("/api/admin/events/{event_id}", dependencies=[Depends(admin_auth)])
+def admin_patch_event(event_id: int, req: EventPatch, conn=Depends(get_conn)):
+    try:
+        logic.set_event_active(conn, event_id, req.active)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Etkinlik bulunamadı")
+    return {"ok": True}
+
+
+class SettingsReq(BaseModel):
+    agency_name: str | None = Field(None, max_length=120)
+    greeting: str | None = Field(None, max_length=600)
+    scenario: str | None = Field(None, max_length=12000)
+
+
+@app.get("/api/admin/settings", dependencies=[Depends(admin_auth)])
+def admin_get_settings(conn=Depends(get_conn)):
+    out = logic.get_settings(conn)
+    out["agency_name_default"] = os.environ.get("AGENCY_NAME", "Demo Turizm")
+    return out
+
+
+@app.put("/api/admin/settings", dependencies=[Depends(admin_auth)])
+def admin_put_settings(req: SettingsReq, conn=Depends(get_conn)):
+    logic.set_settings(conn, **req.model_dump(exclude_none=True))
+    return logic.get_settings(conn)
 
 
 @app.get("/api/admin/holds", dependencies=[Depends(admin_auth)])

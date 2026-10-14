@@ -298,3 +298,87 @@ def seed_demo(conn, today: date | None = None) -> bool:
     create_package(conn, ev2, "Gala VIP Paketi", 6200, 6,
                    "Cuma giriş - Pazar çıkış\nHer şey dahil konaklama\nVIP masa\nÖzel transfer")
     return True
+
+
+# ---------------------------------------------------------------- ayarlar (firma adı, açılış, senaryo)
+
+SETTING_KEYS = ("agency_name", "greeting", "scenario")
+
+
+def get_settings(conn) -> dict:
+    out = {k: "" for k in SETTING_KEYS}
+    for r in conn.execute("SELECT key, value FROM settings"):
+        if r["key"] in out:
+            out[r["key"]] = r["value"]
+    return out
+
+
+def _set(conn, key: str, value: str) -> None:
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+
+def set_settings(conn, **fields) -> None:
+    for k, v in fields.items():
+        if k in SETTING_KEYS and v is not None:
+            _set(conn, k, str(v).strip())
+
+
+def set_event_active(conn, event_id: int, active: bool) -> None:
+    cur = conn.execute("UPDATE events SET active = ? WHERE id = ?", (1 if active else 0, event_id))
+    if cur.rowcount == 0:
+        raise KeyError(event_id)
+
+
+CASINO_GREETING = ("Merhaba, ben {firma} dijital asistanı Zeynep. Kıbrıs'taki VIP misafir programımız için "
+                   "sizi davet etmek istiyoruz, birkaç dakikanız var mı?")
+
+CASINO_SCENARIO = """ROL
+Sen firmanın casino VIP misafir ilişkileri temsilcisisin. Amacın seçkin oyuncuları Kıbrıs'taki anlaşmalı casino otelimize davet etmek. Görüşmeyi sen başlatmış gibi davran: misafiri bir davet için arıyorsun.
+
+TEKLİF
+- Hafta içi davet (Pazartesi - Perşembe): misafir konaklaması boyunca toplam en az beş bin dolarlık oyun oynarsa uçak bileti ve otel odası ücreti alınmaz.
+- Hafta sonu davet (Cuma - Pazar): şart en az on bin dolarlık oyundur; bu durumda da uçak bileti ve oda ücreti alınmaz.
+- Paketlerdeki fiyat alanı misafirin ödeyeceği ücret DEĞİLDİR; ikram için gereken minimum oyun tutarıdır. Bunu asla "ödeme" veya "paket fiyatı" diye anlatma.
+- Şart sağlanmazsa ücretlerin nasıl yansıtılacağı, oyun tutarının nasıl hesaplandığı, kaç gece kalınabileceği gibi detayları bilmiyorsan uydurma; yetkilinin bu detayları ileteceğini söyle.
+
+AKIŞ
+1. Açılıştan sonra misafir uygunsa davetin özünü bir iki cümleyle anlat.
+2. Misafirin casino giriş yaşı sınırının üzerinde olduğunu kibarca teyit et.
+3. Hafta içi mi hafta sonu mu düşündüğünü, kaç kişi geleceğini ve hangi şehirden uçacağını sor.
+4. Uygun daveti anlat. Hafta içini seçip oyun bütçesinin yüksek olduğunu söyleyen misafire hafta sonu davetini yalnızca bir kez öner.
+5. Misafir kabul ederse adını, telefonunu ve tercih ettiği tarihi al; check_availability ve hold_rooms ile yerini ayır. Uçak bileti ve rezervasyon detayları için yetkilinin arayacağını söyle. Kimlik, pasaport veya kart bilgisi isteme.
+6. Düşünmek isterse ne zaman tekrar aranmak istediğini sor ve notu kaydet.
+
+SORUMLU OYUN (her zaman uy)
+- Kazanç vaat etme, oyunu para kazanma yolu gibi sunma.
+- Israr etme ve baskı kurma; misafir istemediğini söylerse kibarca teşekkür et ve görüşmeyi kapat.
+- Misafir borç, maddi sıkıntı veya oyunu bırakmak istediğinden söz ederse teklifi sunmayı hemen bırak, nazikçe görüşmeyi bitir, notu declined olarak kaydet ve notlara "tekrar aranmak istemiyor" yaz.
+- Misafir bir daha aranmak istemediğini söylerse bunu notlara mutlaka yaz."""
+
+
+def seed_casino(conn, today: date | None = None) -> bool:
+    """Casino VIP davet demosunu bir kez yükler (kurgusal). Diğer etkinlikler pasife alınır, panelden açılabilir."""
+    if conn.execute("SELECT 1 FROM settings WHERE key = 'casino_seeded'").fetchone():
+        return False
+    today = today or utcnow().date()
+    conn.execute("UPDATE events SET active = 0")
+    ev = create_event(
+        conn, "VIP Casino Daveti (Demo)", today.isoformat(), (today + timedelta(days=90)).isoformat(),
+        venue="Demo Casino Resort, Kıbrıs",
+        description="Her hafta geçerli davet. Hafta içi Pazartesi-Perşembe, hafta sonu Cuma-Pazar. "
+                    "Fiyat alanı minimum oyun tutarıdır; şart sağlanırsa uçak bileti ve oda ücretsizdir.",
+    )
+    create_package(conn, ev, "Hafta İçi VIP Davet (min. oyun)", 5000, 20,
+                   "Pazartesi - Perşembe\nUçak bileti ikram\nOtel odası ikram\n"
+                   "Şart: konaklama boyunca en az 5.000 $ oyun", max_discount_pct=0)
+    create_package(conn, ev, "Hafta Sonu VIP Davet (min. oyun)", 10000, 10,
+                   "Cuma - Pazar\nUçak bileti ikram\nOtel odası ikram\n"
+                   "Şart: konaklama boyunca en az 10.000 $ oyun", max_discount_pct=0)
+    cur = get_settings(conn)
+    if not cur["scenario"]:
+        _set(conn, "scenario", CASINO_SCENARIO)
+    if not cur["greeting"]:
+        _set(conn, "greeting", CASINO_GREETING)
+    _set(conn, "casino_seeded", "1")
+    return True

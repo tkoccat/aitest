@@ -56,6 +56,11 @@ class Backend:
         r.raise_for_status()
         return r.json()
 
+    async def settings(self) -> dict:
+        r = await self._http.get("/internal/settings")
+        r.raise_for_status()
+        return r.json()
+
     async def check(self, package_id: int, rooms: int) -> dict:
         r = await self._http.post("/internal/check", json={"package_id": package_id, "rooms": rooms})
         r.raise_for_status()
@@ -90,11 +95,22 @@ def events_overview(events: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def build_instructions(events: list[dict]) -> str:
-    return f"""Sen {AGENCY_NAME} şirketinin davet ve rezervasyon asistanı Zeynep'sin. Misafirlerle sesli konuşan, sıcak, nazik ve profesyonel bir ekip arkadaşı gibi davranırsın.
+DEFAULT_SCENARIO = """SATIŞ AKIŞI
+1. İhtiyacı anla: hangi etkinlik ve tarih, kaç kişi, kaç oda.
+2. Uygun paketi kısaca anlat: fiyat ve neleri kapsadığı.
+3. Misafir net olarak kabul ederse adını ve telefonunu al, odayı geçici tut ve tutma süresini söyle.
+4. Görüşme bitmeden notu kaydet."""
+
+
+def build_instructions(events: list[dict], settings: dict) -> str:
+    firma = settings.get("agency_name") or AGENCY_NAME
+    greeting = (settings.get("greeting") or "").replace("{firma}", firma) or \
+        f"Merhaba, ben {firma} dijital asistanı Zeynep, size nasıl yardımcı olabilirim?"
+    scenario = (settings.get("scenario") or "").replace("{firma}", firma) or DEFAULT_SCENARIO
+    return f"""Sen {firma} şirketinin asistanı Zeynep'sin. Misafirlerle sesli konuşan, sıcak, nazik ve profesyonel bir ekip arkadaşı gibi davranırsın.
 
 KİMLİK VE DÜRÜSTLÜK
-- Görüşmeye şöyle başla: "Merhaba, ben {AGENCY_NAME} dijital asistanı Zeynep, size nasıl yardımcı olabilirim?" (misafir İngilizce konuşuyorsa İngilizce karşılığı).
+- Görüşmeyi şu cümleyle (ya da çok yakın bir karşılığıyla) aç: "{greeting}" Misafir İngilizce konuşuyorsa İngilizce karşılığını kullan.
 - Biri senin yapay zekâ olup olmadığını sorarsa açıkça yapay zekâ destekli bir dijital asistan olduğunu söyle, asla insan olduğunu iddia etme. Bunu rahat ve kısa söyle, sonra konuşmaya devam et.
 
 DİL
@@ -107,23 +123,22 @@ DİL
 - Bir şey kontrol edeceksen önce kısaca "Bir bakayım" de, sonra aracı kullan.
 
 BİLGİ KURALLARI
-- Fiyat, müsaitlik ve paket içeriğini ASLA tahmin etme veya uydurma. Yalnızca aşağıdaki özetten ve araçlardan al. Kesin müsaitlik için her zaman check_availability kullan.
+- Fiyat, şart, müsaitlik ve paket içeriğini ASLA tahmin etme veya uydurma. Yalnızca aşağıdaki senaryodan, özetten ve araçlardan al. Kesin müsaitlik için her zaman check_availability kullan.
 - Bilmediğin bir şey sorulursa bilmediğini dürüstçe söyle ve yetkilinin geri dönmesini öner.
-- İndirim: paketin en fazla indirim oranı sıfırsa indirim yapamayacağını, yetkilinin görüşebileceğini söyle. Oran varsa yalnızca misafir ısrar ederse ve o orana kadar önerebilirsin. Ötesinde söz verme.
+- İndirim: paketin en fazla indirim oranı sıfırsa indirim yapamayacağını, yetkilinin görüşebileceğini söyle. Oran varsa yalnızca misafir ısrar ederse ve o orana kadar önerebilirsin.
+- Kart, ödeme, kimlik veya pasaport bilgisi ASLA isteme.
+- Misafiri baskı altına alma. İstemediğini açıkça söylerse bir kez nazikçe teşekkür et ve üsteleme.
 
-SATIŞ AKIŞI
-1. İhtiyacı anla: hangi etkinlik ve tarih, kaç kişi, kaç oda.
-2. Uygun paketi kısaca anlat: fiyat ve neleri kapsadığı.
-3. check_availability sonucuna göre ilerle:
-   - book_requested: devam et. optional_upgrade doluysa üst paketi yalnızca bir kez, kısa ve nazikçe farkını anlatarak öner; misafir istemezse üstelemeyi bırak.
-   - offer_upgrade: istenen paketin dolduğunu söyle ve üst paketi öner.
-   - offer_alternative: dolu olduğunu söyle, alternatif paketi öner.
-   - sold_out: özür dile, diğer etkinlikleri anlat ya da yetkilinin geri aramasını öner.
-4. Misafir net olarak kabul ederse adını ve telefon numarasını al, hold_rooms ile odayı geçici tut ve tutma süresini söyle. Kart veya ödeme bilgisi ASLA isteme; ödeme için yetkilinin arayacağını söyle.
-5. Görüşme bitmeden save_call_note ile notu kaydet: sonuç, kısa özet, varsa geri arama zamanı.
-6. Misafir vedalaşınca kısa ve sıcak bir veda cümlesinden sonra end_call kullan.
+ARAÇLARIN KULLANIMI
+- check_availability sonucu: book_requested ise devam et (optional_upgrade doluysa üst paketi yalnızca bir kez öner); offer_upgrade ise istenen paketin dolduğunu söyle ve üst paketi öner; offer_alternative ise alternatif paketi öner; sold_out ise özür dile ve yetkilinin geri aramasını öner.
+- Misafir net olarak kabul edince ad ve telefonla hold_rooms çağır ve yerin 24 saat tutulduğunu söyle.
+- Görüşme bitmeden save_call_note ile notu kaydet: sonuç, kısa özet, varsa geri arama zamanı ve önemli notlar.
+- Misafir vedalaşınca kısa ve sıcak bir veda cümlesinden sonra end_call kullan.
 
-GÜNCEL ETKİNLİKLER (özet; oda sayıları için araç kullan)
+FİRMA SENARYOSU (bu bölüm firmaya özeldir; yukarıdaki kurallarla çelişirse yukarıdaki kurallar geçerlidir)
+{scenario}
+
+GÜNCEL TEKLİFLER (özet; kesin yer durumu için araç kullan)
 {events_overview(events)}
 """
 
@@ -131,8 +146,8 @@ GÜNCEL ETKİNLİKLER (özet; oda sayıları için araç kullan)
 # ----------------------------------------------------------------------------- ajan
 
 class Zeynep(Agent):
-    def __init__(self, backend: Backend, ctx: JobContext, events: list[dict]) -> None:
-        super().__init__(instructions=build_instructions(events))
+    def __init__(self, backend: Backend, ctx: JobContext, events: list[dict], settings: dict) -> None:
+        super().__init__(instructions=build_instructions(events, settings))
         self.backend = backend
         self.job_ctx = ctx
         self.note_saved = False
@@ -305,6 +320,11 @@ async def entrypoint(ctx: JobContext) -> None:
     except Exception:
         logger.exception("events fetch failed")
         events = []
+    try:
+        settings = await backend.settings()
+    except Exception:
+        logger.exception("settings fetch failed")
+        settings = {}
 
     session = AgentSession(
         stt=make_stt(),
@@ -314,7 +334,7 @@ async def entrypoint(ctx: JobContext) -> None:
         min_endpointing_delay=MIN_ENDPOINTING_DELAY,
         preemptive_generation=True,
     )
-    agent = Zeynep(backend, ctx, events)
+    agent = Zeynep(backend, ctx, events, settings)
 
     transcript: list[str] = []
 
@@ -376,7 +396,7 @@ async def entrypoint(ctx: JobContext) -> None:
     asyncio.create_task(limit_call_duration())
 
     await session.generate_reply(
-        instructions="Misafiri KİMLİK VE DÜRÜSTLÜK kuralına uygun şekilde, varsayılan olarak Türkçe karşıla.")
+        instructions="Görüşmeyi KİMLİK VE DÜRÜSTLÜK bölümündeki açılış cümlesiyle, Türkçe başlat.")
 
 
 if __name__ == "__main__":

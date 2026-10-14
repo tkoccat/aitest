@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS calls (
     hold_id INTEGER,
     transcript TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
 """
 
 

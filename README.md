@@ -12,7 +12,7 @@ bir şey kontrol ederken klavye sesi duyulur.
 | `backend/` (FastAPI + SQLite) | Etkinlik/paket/kontenjan, oda tutma, yukarı satış önerisi, görüşme kayıtları, LiveKit jetonu |
 | `agent/` (LiveKit Agents) | Zeynep: ses (ElevenLabs), anlama (OpenAI), araçlar, ofis ortamı ve klavye sesi |
 | `web/call.html` | Misafirin tıkladığı arama sayfası (`/call?key=...`) |
-| `web/admin.html` | Yönetim paneli (`/admin`): görüşmeler ve notlar, etkinlikler/paketler, tutulan odalar |
+| `web/admin.html` | Yönetim paneli (`/admin`): görüşmeler ve notlar, teklifler/paketler, tutulan yerler, **Senaryo** (firma adı, açılış cümlesi, senaryo metni; deploy gerekmez) |
 
 Satış kuralları (hangi paket önerilir, indirim sınırı) kodda ve veride tanımlıdır; yapay zekâ fiyat veya müsaitlik uyduramaz,
 bu bilgileri yalnızca araçlardan alır.

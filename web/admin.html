@@ -50,8 +50,9 @@
     <h1>Zeynep · Yönetim</h1>
     <nav>
       <button data-tab="calls" class="on">Görüşmeler</button>
-      <button data-tab="events">Etkinlikler</button>
-      <button data-tab="holds">Tutulan odalar</button>
+      <button data-tab="events">Teklifler</button>
+      <button data-tab="holds">Tutulan yerler</button>
+      <button data-tab="scenario">Senaryo</button>
     </nav>
     <button class="btn sm" id="logout">Çıkış</button>
   </header>
@@ -75,6 +76,21 @@
         </form>
       </div>
       <div id="events-list"></div>
+    </section>
+
+    <section id="tab-scenario" class="hidden">
+      <div class="card">
+        <strong>Zeynep'in senaryosu</strong>
+        <p class="small muted">Burada yazdıklarınız bir sonraki görüşmeden itibaren geçerli olur, deploy gerekmez. Metinde <code>{firma}</code> yazdığınız yere firma adı gelir.
+          Fiyat ve yer sayıları "Teklifler" sekmesinden okunur; senaryoya yazdığınız şartlarla aynı olmalarına dikkat edin.</p>
+        <form id="set-form">
+          <label>Firma adı <input name="agency_name" id="set-agency" maxlength="120" style="width:100%"></label>
+          <label style="display:block;margin-top:10px">Açılış cümlesi <input name="greeting" maxlength="600" style="width:100%"></label>
+          <label style="display:block;margin-top:10px">Senaryo ve kurallar
+            <textarea name="scenario" maxlength="12000" rows="22" style="width:100%;font:inherit;font-size:14px;padding:8px"></textarea></label>
+          <div style="margin-top:10px"><button class="btn primary">Kaydet</button> <span class="small muted" id="set-msg"></span></div>
+        </form>
+      </div>
     </section>
 
     <section id="tab-holds" class="hidden">
@@ -110,8 +126,8 @@ function show() { $("#login").classList.add("hidden"); $("#app").classList.remov
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
-  ["calls","events","holds"].forEach(t => $("#tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));
-  ({ calls: loadCalls, events: loadEvents, holds: loadHolds })[b.dataset.tab]();
+  ["calls","events","holds","scenario"].forEach(t => $("#tab-" + t).classList.toggle("hidden", t !== b.dataset.tab));
+  ({ calls: loadCalls, events: loadEvents, holds: loadHolds, scenario: loadSettings })[b.dataset.tab]();
 });
 $("#login-btn").onclick = login;
 $("#key").addEventListener("keydown", e => e.key === "Enter" && login());
@@ -143,6 +159,7 @@ async function loadEvents() {
   $("#events-list").innerHTML = events.map(e => `
     <div class="card">
       <strong>${esc(e.name)}</strong> ${e.active ? "" : '<span class="badge b-released">pasif</span>'}
+      <button class="btn sm ev-toggle" data-eid="${e.event_id}" data-on="${e.active ? 0 : 1}" style="float:right">${e.active ? "Satışı kapat" : "Satışa aç"}</button>
       <div class="small muted">${esc(e.check_in)} → ${esc(e.check_out)} · ${esc(e.venue)}</div>
       <div class="small">${esc(e.description)}</div>
       ${e.packages.map(p => `
@@ -173,6 +190,10 @@ async function loadEvents() {
       loadEvents();
     } catch (e) { alert(e.message); }
   });
+  document.querySelectorAll(".ev-toggle").forEach(b => b.onclick = async () => {
+    try { await api("/api/admin/events/" + b.dataset.eid, { method:"PATCH", body: JSON.stringify({ active: b.dataset.on === "1" }) }); loadEvents(); }
+    catch (e) { alert(e.message); }
+  });
   document.querySelectorAll(".pkg [data-act]").forEach(b => b.onclick = async () => {
     const pid = b.closest(".pkg").dataset.pid, act = b.dataset.act;
     let body;
@@ -187,6 +208,21 @@ $("#ev-form").onsubmit = async (ev) => {
   ev.preventDefault();
   try { await api("/api/admin/events", { method:"POST", body: JSON.stringify(Object.fromEntries(new FormData(ev.target))) }); ev.target.reset(); loadEvents(); }
   catch (e) { alert(e.message); }
+};
+
+async function loadSettings() {
+  const st = await api("/api/admin/settings");
+  const f = $("#set-form");
+  f.agency_name.value = st.agency_name; f.agency_name.placeholder = st.agency_name_default;
+  f.greeting.value = st.greeting; f.scenario.value = st.scenario;
+  $("#set-msg").textContent = "";
+}
+$("#set-form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  try {
+    await api("/api/admin/settings", { method:"PUT", body: JSON.stringify(Object.fromEntries(new FormData(ev.target))) });
+    $("#set-msg").textContent = "Kaydedildi. Bir sonraki görüşmede geçerli.";
+  } catch (e) { $("#set-msg").textContent = "Kaydedilemedi: " + e.message; }
 };
 
 async function loadHolds() {

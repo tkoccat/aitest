@@ -126,6 +126,30 @@ class LogicTests(unittest.TestCase):
         self.assertEqual([p["price_usd"] for p in evs[0]["packages"]], [5000, 7000])
         conn2.close()
 
+    def test_seed_casino_once_and_deactivates_others(self):
+        self.assertTrue(logic.seed_casino(self.conn, date(2026, 10, 14)))
+        self.assertFalse(logic.seed_casino(self.conn, date(2026, 10, 14)))
+        evs = logic.list_events(self.conn, now=NOW)
+        self.assertEqual([e["name"] for e in evs], ["VIP Casino Daveti (Demo)"])
+        self.assertEqual([p["price_usd"] for p in evs[0]["packages"]], [5000, 10000])
+        # hafta içi dolunca hafta sonu önerilir
+        wk = evs[0]["packages"][0]["package_id"]
+        logic.hold_rooms(self.conn, wk, 20, "A", "1", now=NOW)
+        self.assertEqual(logic.check_package(self.conn, wk, 1, now=NOW)["recommendation"], "offer_upgrade")
+        st = logic.get_settings(self.conn)
+        self.assertIn("SORUMLU OYUN", st["scenario"])
+        self.assertTrue(st["greeting"])
+
+    def test_settings_roundtrip_and_event_toggle(self):
+        logic.set_settings(self.conn, agency_name=" Firma ", scenario="X", unknown="y")
+        st = logic.get_settings(self.conn)
+        self.assertEqual((st["agency_name"], st["scenario"], st["greeting"]), ("Firma", "X", ""))
+        self.assertNotIn("unknown", st)
+        logic.set_event_active(self.conn, self.ev, False)
+        self.assertEqual(logic.list_events(self.conn, now=NOW), [])
+        with self.assertRaises(KeyError):
+            logic.set_event_active(self.conn, 999, True)
+
 
 class TokenTests(unittest.TestCase):
     def test_jwt_is_valid_hs256(self):
