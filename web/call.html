@@ -92,7 +92,14 @@ async function startCall() {
 
     room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
     room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
-      if (track.kind === "audio") { track.attach($("remote-audio")); }
+      if (track.kind === "audio") {
+        // Her ses izi (Zeynep'in sesi, ofis ortamı) kendi öğesinde çalmalı; tek öğede biri diğerini ezer.
+        const el = track.attach();
+        el.autoplay = true;
+        el.dataset.sid = track.sid;
+        $("remote-audio").parentNode.appendChild(el);
+        el.play().catch(() => {});
+      }
     });
     room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, (speakers) => {
       $("avatar").classList.toggle("speaking", speakers.some(s => !s.isLocal));
