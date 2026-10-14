@@ -37,6 +37,8 @@ AGENCY_NAME = os.environ.get("AGENCY_NAME", "Demo Turizm")
 MAX_CALL_MINUTES = int(os.environ.get("MAX_CALL_MINUTES", "8"))
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4.1")
 SUMMARY_MODEL = os.environ.get("SUMMARY_MODEL", "gpt-4.1-mini")
+STT_MODEL = os.environ.get("STT_MODEL", "gpt-4o-mini-transcribe")
+MIN_ENDPOINTING_DELAY = float(os.environ.get("MIN_ENDPOINTING_DELAY", "0.3"))
 AMBIENT_VOLUME = float(os.environ.get("AMBIENT_VOLUME", "0.35"))
 OUTCOMES = ["reserved_hold", "positive", "callback", "thinking", "declined", "info_only"]
 
@@ -267,9 +269,9 @@ def prewarm(proc: JobProcess) -> None:
 
 def make_stt():
     try:
-        return openai.STT(model="gpt-4o-transcribe", detect_language=True)
+        return openai.STT(model=STT_MODEL, detect_language=True)
     except TypeError:  # eski sürüm: dil tespiti yok, Türkçe'ye sabitle
-        return openai.STT(model="gpt-4o-transcribe", language="tr")
+        return openai.STT(model=STT_MODEL, language="tr")
 
 
 def make_tts():
@@ -309,6 +311,8 @@ async def entrypoint(ctx: JobContext) -> None:
         llm=openai.LLM(model=LLM_MODEL, temperature=0.6),
         tts=make_tts(),
         vad=ctx.proc.userdata["vad"],
+        min_endpointing_delay=MIN_ENDPOINTING_DELAY,
+        preemptive_generation=True,
     )
     agent = Zeynep(backend, ctx, events)
 

@@ -47,6 +47,8 @@ services:
       ELEVEN_API_KEY: ${ELEVEN_API_KEY:-}
       ELEVEN_VOICE_ID: ${ELEVEN_VOICE_ID:-}
       ELEVEN_MODEL: ${ELEVEN_MODEL:-eleven_flash_v2_5}
+      STT_MODEL: ${STT_MODEL:-gpt-4o-mini-transcribe}
+      MIN_ENDPOINTING_DELAY: ${MIN_ENDPOINTING_DELAY:-0.3}
       LLM_MODEL: ${LLM_MODEL:-gpt-4.1}
       SUMMARY_MODEL: ${SUMMARY_MODEL:-gpt-4.1-mini}
       AGENCY_NAME: ${AGENCY_NAME:-Demo Turizm}
