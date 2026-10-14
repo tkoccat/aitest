@@ -273,11 +273,23 @@ def make_stt():
 
 
 def make_tts():
-    kwargs = {"model": os.environ.get("ELEVEN_MODEL", "eleven_flash_v2_5")}
-    voice = os.environ.get("ELEVEN_VOICE_ID")
-    if voice:
-        kwargs["voice_id"] = voice
-    return elevenlabs.TTS(**kwargs)
+    """TTS_PROVIDER=openai (varsayılan) veya elevenlabs."""
+    provider = os.environ.get("TTS_PROVIDER", "openai").lower()
+    if provider == "elevenlabs":
+        kwargs = {"model": os.environ.get("ELEVEN_MODEL", "eleven_flash_v2_5")}
+        voice = os.environ.get("ELEVEN_VOICE_ID")
+        if voice:
+            kwargs["voice_id"] = voice
+        return elevenlabs.TTS(**kwargs)
+    return openai.TTS(
+        model=os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
+        voice=os.environ.get("OPENAI_TTS_VOICE", "coral"),
+        instructions=(
+            "Sen sıcak, nazik ve profesyonel bir kadın müşteri temsilcisisin. "
+            "Türkçeyi doğal bir İstanbul Türkçesi aksanıyla, akıcı ve rahat bir tonda konuş; "
+            "misafir İngilizce konuşuyorsa İngilizceyi doğal bir tonda söyle. Acele etme, gülümseyen bir ses kullan."
+        ),
+    )
 
 
 async def entrypoint(ctx: JobContext) -> None:
